@@ -1,7 +1,11 @@
 const menu = require("../../lib/menu");
 const logger = require("../../lib/logger");
 const { sendRootMenu } = require("../commands/basic");
-const { MAX_FILE_SIZE_MB } = require("../config");
+const { MAX_FILE_SIZE_MB, OWNER_ID } = require("../config");
+
+function isOwner(ctx) {
+  return OWNER_ID && String(ctx.from.id) === String(OWNER_ID);
+}
 
 function register(bot) {
   bot.action(/^menu:(root|download|convert|settings|history|help)$/, async (ctx) => {
@@ -27,7 +31,7 @@ function register(bot) {
         keyboard = menu.backKeyboard();
         break;
       case "help":
-        caption = menu.helpCaption(MAX_FILE_SIZE_MB);
+        caption = menu.helpCaption(MAX_FILE_SIZE_MB, isOwner(ctx));
         keyboard = menu.backKeyboard();
         break;
       case "root":

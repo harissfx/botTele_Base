@@ -6,27 +6,12 @@ const { ownerOnly } = require("./lib/guard");
 const { scheduleInstagramCookieCheck } = require("./lib/cookiecheck");
 const config = require("./src/config");
 const state = require("./src/core/state");
+const botSettings = require("./lib/botsettings");
 const { createNotifyOwner } = require("./src/core/notify");
 
 if (!config.BOT_TOKEN) {
   logger.error("BOT_TOKEN belum diisi. Copy .env.example jadi .env lalu isi token bot kamu.");
   process.exit(1);
-}
-
-logger.printBanner({
-  ownerConfigured: Boolean(config.OWNER_ID),
-  maxFileSizeMB: config.MAX_FILE_SIZE_MB,
-});
-
-if (!config.OWNER_ID) {
-  logger.warn(
-    "OWNER_ID belum di-set di .env — bot ini masih bisa dipakai SIAPA AJA yang tau link/username bot kamu. " +
-      "Isi OWNER_ID (ID Telegram kamu, dari @userinfobot) di .env supaya bot cuma bisa dipakai kamu sendiri."
-  );
-}
-
-if (config.GALLERY_DL_COOKIES_FILE && !fs.existsSync(config.GALLERY_DL_COOKIES_FILE)) {
-  logger.warn(`GALLERY_DL_COOKIES_FILE diset ke "${config.GALLERY_DL_COOKIES_FILE}" tapi file-nya gak ketemu.`);
 }
 
 const bot = new Telegraf(config.BOT_TOKEN);
@@ -58,23 +43,43 @@ require("./src/commands/basic").register(bot);
 require("./src/commands/status").register(bot);
 require("./src/commands/settings").register(bot);
 require("./src/commands/cancel").register(bot);
+require("./src/commands/setbot").register(bot);
+require("./src/commands/admin").register(bot);
 require("./src/convert/sticker").register(bot);
 require("./src/convert/file").register(bot);
 require("./src/handlers/menu").register(bot);
 require("./src/handlers/text").register(bot);
 
-function cleanOldDownloads() {
+function cleanOldDownloads(maxAgeMs) {
+  const cutoff = Date.now() - maxAgeMs;
+  let removed = 0;
   try {
-    const files = fs.readdirSync(state.DOWNLOAD_DIR);
-    for (const f of files) {
-      const fp = path.join(state.DOWNLOAD_DIR, f);
-      fs.rmSync(fp, { recursive: true, force: true });
+    const entries = fs.readdirSync(state.DOWNLOAD_DIR, { withFileTypes: true });
+    for (const entry of entries) {
+      const fp = path.join(state.DOWNLOAD_DIR, entry.name);
+      try {
+        const stat = fs.statSync(fp);
+        if (stat.mtimeMs < cutoff) {
+          fs.rmSync(fp, { recursive: true, force: true });
+          removed++;
+        }
+      } catch (_) {}
     }
   } catch (e) {
+    logger.warn("Cleanup downloads gagal:", e.message);
   }
+  if (removed > 0) {
+    logger.info(`Cleanup: hapus ${removed} file/folder lama di downloads/`);
+  }
+  return removed;
 }
 
-cleanOldDownloads();
+const CLEANUP_INTERVAL_MS = 30 * 60 * 1000;
+const maxAgeMs = Math.max(0.1, config.DOWNLOAD_CLEANUP_HOURS) * 60 * 60 * 1000;
+
+cleanOldDownloads(maxAgeMs);
+const cleanupTimer = setInterval(() => cleanOldDownloads(maxAgeMs), CLEANUP_INTERVAL_MS);
+cleanupTimer.unref();
 
 bot.catch((err, ctx) => {
   logger.error(`Error saat proses update ${ctx.updateType} dari ${ctx.from?.id}:`, err);
@@ -87,23 +92,42 @@ process.on("unhandledRejection", (err) => {
   notifyOwner(`Unhandled rejection: ${err && err.message ? err.message : err}`);
 });
 
-bot.launch().catch((err) => {
-  logger.error("Bot gagal jalan:", err.message);
-  process.exit(1);
-});
+async function start() {
+  let botUsername;
+  try {
+    const me = await bot.telegram.getMe();
+    botUsername = me.username;
+  } catch (err) {
+    logger.warn("Gagal ambil info bot dari Telegram (getMe):", err.message);
+  }
 
-logger.ok("Bot jalan! Kirim link video ke bot Telegram kamu, atau ketik /menu.");
-bot.telegram
-  .getMe()
-  .then((me) => {
-    logger.info(`Bot aktif sebagai @${me.username}`);
-    logger.startWaitingSpinner();
-  })
-  .catch(() => {});
+  logger.printBanner({
+    botUsername,
+    mode: botSettings.getSettings().mode,
+    maxFileSizeMB: config.MAX_FILE_SIZE_MB,
+  });
 
-if (config.GALLERY_DL_COOKIES_FILE) {
-  scheduleInstagramCookieCheck(config.GALLERY_DL_COOKIES_FILE, notifyOwner);
+  if (!config.OWNER_ID) {
+    logger.warn(
+      "OWNER_ID belum di-set di .env — bot ini masih bisa dipakai SIAPA AJA yang tau link/username bot kamu. " +
+        "Isi OWNER_ID (ID Telegram kamu, dari @userinfobot) di .env supaya bot cuma bisa dipakai kamu sendiri."
+    );
+  }
+
+  bot.launch().catch((err) => {
+    logger.error("Bot gagal jalan:", err.message);
+    process.exit(1);
+  });
+
+  if (botUsername) logger.info(`Bot aktif sebagai @${botUsername}`);
+  logger.startWaitingSpinner();
+
+  if (config.GALLERY_DL_COOKIES_FILE) {
+    scheduleInstagramCookieCheck(config.GALLERY_DL_COOKIES_FILE, notifyOwner);
+  }
 }
+
+start();
 
 function shutdown(signal) {
   logger.stopWaitingSpinner();

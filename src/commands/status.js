@@ -7,11 +7,16 @@ const { checkInstagramCookies } = require("../../lib/cookiecheck");
 const logger = require("../../lib/logger");
 const state = require("../core/state");
 const { isCriticalError, createNotifyOwner } = require("../core/notify");
-const { GALLERY_DL_COOKIES_FILE, MAX_CONCURRENT } = require("../config");
+const { GALLERY_DL_COOKIES_FILE, MAX_CONCURRENT, OWNER_ID } = require("../config");
+
+function isOwner(ctx) {
+  return OWNER_ID && String(ctx.from.id) === String(OWNER_ID);
+}
 
 function register(bot) {
   const notifyOwner = createNotifyOwner(bot);
   bot.command("cookiecheck", async (ctx) => {
+    if (!isOwner(ctx)) return;
     if (!GALLERY_DL_COOKIES_FILE) {
       return ctx.reply("GALLERY_DL_COOKIES_FILE belum diset di .env, gak ada yang bisa dicek.");
     }
@@ -41,6 +46,7 @@ function register(bot) {
   });
 
   bot.command("status", async (ctx) => {
+    if (!isOwner(ctx)) return;
     const statusMsg = await ctx.reply("⏳ Mengambil info server...");
     try {
       const [cpu, disk, ytdlpVersion] = await Promise.all([
@@ -85,6 +91,7 @@ function register(bot) {
   });
 
   bot.command("stats", async (ctx) => {
+    if (!isOwner(ctx)) return;
     const stats = getStats();
     const typeLabels = {
       video: "▶ Video",
@@ -114,6 +121,7 @@ function register(bot) {
   });
 
   bot.command("formats", async (ctx) => {
+    if (!isOwner(ctx)) return;
     const text = ctx.message.text || "";
     const url = (text.split(/\s+/)[1] || "").trim();
     if (!url || !/^https?:\/\//.test(url)) {

@@ -4,21 +4,60 @@ const { getPrefs } = require("../../lib/prefs");
 const { escapeHtml } = require("../../lib/format");
 const state = require("../core/state");
 const { storePending } = require("../core/helpers");
+const { checkRateLimit } = require("../../lib/ratelimit");
+const coins = require("../../lib/coins");
 const { infoKeyboard, qualityKeyboard, audioFormatKeyboard, buildInfoCaption } = require("../core/keyboards");
 const { isCriticalError, createNotifyOwner } = require("../core/notify");
 const { processDownload, processPlaylistDownload, handlePhotoFallback } = require("../download");
-const { PLAYLIST_LIMIT, GALLERY_DL_COOKIES_FILE } = require("../config");
+const { PLAYLIST_LIMIT, GALLERY_DL_COOKIES_FILE, COIN_COST_DOWNLOAD } = require("../config");
+
+function guardRateLimit(ctx) {
+  const rl = checkRateLimit(ctx.from.id);
+  if (!rl.allowed) {
+    const msg = `⏳ Rate limit: maksimal ${rl.limit} download / 10 menit.\nCoba lagi dalam ~${rl.retrySec} detik.`;
+    if (ctx.callbackQuery) {
+      return ctx.answerCbQuery(msg, { show_alert: true }).then(() => false).catch(() => false);
+    }
+    return ctx.reply(msg).then(() => false).catch(() => false);
+  }
+  return Promise.resolve(true);
+}
+
+async function guardCoins(ctx) {
+  if (!coins.isEnabled()) return true;
+  const userId = ctx.from.id;
+  coins.ensureUser(userId);
+  if (coins.canAfford(userId)) return true;
+  const bal = coins.getBalance(userId);
+  const msg =
+    `🪙 Koin tidak cukup (saldo: ${bal}, butuh: ${COIN_COST_DOWNLOAD}).\n` +
+    `Ajak teman lewat /referral atau tunggu owner top-up.\nCek saldo: /koin`;
+  if (ctx.callbackQuery) {
+    try {
+      await ctx.answerCbQuery(msg, { show_alert: true });
+    } catch (_) {}
+    return false;
+  }
+  try {
+    await ctx.reply(msg);
+  } catch (_) {}
+  return false;
+}
 
 function register(bot) {
   const notifyOwner = createNotifyOwner(bot);
-  bot.on("text", async (ctx) => {
+  bot.on("text", async (ctx, next) => {
     const text = ctx.message.text.trim();
-    if (text.startsWith("/")) return;
+    if (text.startsWith("/")) return next();
     const urlMatch = text.match(/https?:\/\/[^\s]+/);
 
     if (!urlMatch) {
-      return ctx.reply("Kirim link video ya (YouTube/TikTok/Instagram/Facebook/Twitter). Ketik /menu buat lihat semua fitur.");
+      return ctx.reply(
+        "Kirim link video ya (YouTube/TikTok/Instagram/Facebook/Twitter). Ketik /menu buat lihat semua fitur."
+      );
     }
+
+    coins.ensureUser(ctx.from.id);
 
     const url = urlMatch[0];
     const statusMsg = await ctx.reply("⌕ Mengambil info video...");
@@ -28,6 +67,8 @@ function register(bot) {
       info = await fetchInfo(url);
     } catch (err) {
       if (isPhotoFallbackSite(url)) {
+        if (!(await guardRateLimit(ctx))) return;
+        if (!(await guardCoins(ctx))) return;
         const id = storePending({ url, userId: ctx.from.id, chatId: ctx.chat.id, kind: "photo" });
         return handlePhotoFallback(ctx, url, statusMsg, id, GALLERY_DL_COOKIES_FILE);
       }
@@ -72,6 +113,9 @@ function register(bot) {
     await ctx.answerCbQuery("Mencoba lagi...");
     const data = state.pending.get(id);
     if (!data) return ctx.reply("⌛ Permintaan sudah kedaluwarsa, kirim ulang linknya ya.");
+
+    if (!(await guardRateLimit(ctx))) return;
+    if (!(await guardCoins(ctx))) return;
 
     if (type === "photo") {
       const statusMsg = await ctx.reply("↻ Mencoba ambil foto lagi...");
@@ -125,11 +169,14 @@ function register(bot) {
     const data = state.pending.get(id);
     await ctx.answerCbQuery();
     if (!data) return ctx.reply("⌛ Permintaan sudah kedaluwarsa, kirim ulang linknya ya.");
+    if (!(await guardRateLimit(ctx))) return;
+    if (!(await guardCoins(ctx))) return;
     if (type === "video") {
       const prefs = getPrefs(data.userId);
       return processDownload(ctx, id, data, "video", prefs.quality || "best", null);
     }
-    return processDownload(ctx, id, data, "audio", null, "mp3");
+    const prefs = getPrefs(ctx.from.id);
+    return processDownload(ctx, id, data, "audio", null, prefs.audioFormat || "mp3");
   });
 
   bot.action(/^dlqs:([a-f0-9]+):(360|720|1080)$/, async (ctx) => {
@@ -138,6 +185,8 @@ function register(bot) {
     const data = state.pending.get(id);
     await ctx.answerCbQuery();
     if (!data) return ctx.reply("⌛ Permintaan sudah kedaluwarsa, kirim ulang linknya ya.");
+    if (!(await guardRateLimit(ctx))) return;
+    if (!(await guardCoins(ctx))) return;
     await processDownload(ctx, id, data, "video", quality, null);
   });
 
@@ -147,14 +196,18 @@ function register(bot) {
     const data = state.pending.get(id);
     await ctx.answerCbQuery();
     if (!data) return ctx.reply("⌛ Permintaan sudah kedaluwarsa, kirim ulang linknya ya.");
+    if (!(await guardRateLimit(ctx))) return;
+    if (!(await guardCoins(ctx))) return;
     await processDownload(ctx, id, data, "audio", null, format);
   });
-  
+
   bot.action(/^dlpl:([a-f0-9]+)$/, async (ctx) => {
     const id = ctx.match[1];
     const data = state.pending.get(id);
     await ctx.answerCbQuery();
     if (!data) return ctx.reply("⌛ Permintaan sudah kedaluwarsa, kirim ulang linknya ya.");
+    if (!(await guardRateLimit(ctx))) return;
+    if (!(await guardCoins(ctx))) return;
     await processPlaylistDownload(ctx, id, data);
   });
 }

@@ -16,7 +16,13 @@ const { enqueue } = require("../core/queue");
 const { cleanup, findDownloadedFile, retryKeyboard, scheduleAutoDelete } = require("../core/helpers");
 const { buildDownloadCaption } = require("../core/keyboards");
 const { isCriticalError, createNotifyOwner } = require("../core/notify");
-const { MAX_FILE_SIZE_MB, PLAYLIST_LIMIT, AUTO_COMPRESS } = require("../config");
+const { MAX_FILE_SIZE_MB, PLAYLIST_LIMIT, AUTO_COMPRESS, COIN_COST_DOWNLOAD } = require("../config");
+const coins = require("../../lib/coins");
+
+function chargeCoins(userId) {
+  if (!coins.isEnabled()) return;
+  coins.spendCoins(userId, COIN_COST_DOWNLOAD);
+}
 
 let notifyOwner = () => {};
 function initNotify(bot) {
@@ -130,6 +136,7 @@ async function processDownload(ctx, id, data, type, quality, audioFormat) {
           type,
           quality: type === "video" ? quality : audioFormat || "mp3",
         });
+        chargeCoins(userId);
 
         if (prefs.autoDeleteMin) scheduleAutoDelete(ctx, sentMsg, prefs.autoDeleteMin);
 
@@ -242,6 +249,7 @@ async function processPlaylistDownload(ctx, id, data) {
           type: "playlist",
           quality,
         });
+        if (sentCount > 0) chargeCoins(userId);
       } catch (err) {
         if (err.message === "__CANCELLED__") {
           try {
@@ -328,6 +336,7 @@ async function handlePhotoFallback(ctx, url, statusMsg, id, GALLERY_DL_COOKIES_F
       type: "photo",
       quality: null,
     });
+    chargeCoins(ctx.from.id);
   } catch (err) {
     logger.error(err);
     if (isCriticalError(err)) {

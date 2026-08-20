@@ -43,7 +43,7 @@ function scheduleAutoDelete(ctx, sentMsg, minutes) {
 }
 
 function getBannerSource() {
-  const localBanner = path.join(__dirname, "../.", "assets", "banner.jpg");
+  const localBanner = path.join(__dirname, "..", "image", "banner.jpg");
   if (fs.existsSync(localBanner)) return { source: localBanner };
   return BANNER_URL;
 }

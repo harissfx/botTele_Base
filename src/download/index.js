@@ -1,19 +1,20 @@
 const fs = require("fs");
 const path = require("path");
-const { escapeHtml, formatSize, progressBar } = require("../lib/format");
+const { escapeHtml, formatSize, progressBar } = require("../../lib/format");
 const {
   downloadVideoWithProgress,
   downloadAudioWithProgress,
   downloadPlaylistWithProgress,
-} = require("../lib/ytdlp");
-const { compressVideoToTarget } = require("../lib/ffmpeg");
-const { downloadPhotos } = require("../lib/gallery");
-const { addEntry } = require("../lib/history");
-const { getPrefs } = require("../lib/prefs");
-const logger = require("../lib/logger");
+} = require("../../lib/ytdlp");
+const { compressVideoToTarget } = require("../../lib/ffmpeg");
+const { downloadPhotos } = require("../../lib/gallery");
+const { addEntry } = require("../../lib/history");
+const { getPrefs } = require("../../lib/prefs");
+const logger = require("../../lib/logger");
 const state = require("../core/state");
 const { enqueue } = require("../core/queue");
 const { cleanup, findDownloadedFile, retryKeyboard, scheduleAutoDelete } = require("../core/helpers");
+const { buildDownloadCaption } = require("../core/keyboards");
 const { isCriticalError, createNotifyOwner } = require("../core/notify");
 const { MAX_FILE_SIZE_MB, PLAYLIST_LIMIT, AUTO_COMPRESS } = require("../config");
 
@@ -39,7 +40,7 @@ async function processDownload(ctx, id, data, type, quality, audioFormat) {
         const speed = meta && meta.speed ? ` • ${meta.speed}` : "";
         const eta = meta && meta.eta ? ` • ETA ${meta.eta}` : "";
         try {
-          await ctx.editMessageCaption(
+          await ctx.editMessageText(
             `⏳ Downloading...\n<code>${bar}</code> ${percent.toFixed(0)}% ${speed}${eta}\n\nKetik /cancel buat batalin.`,
             { parse_mode: "HTML" }
           );
@@ -55,7 +56,7 @@ async function processDownload(ctx, id, data, type, quality, audioFormat) {
       const outputTemplate = path.join(state.DOWNLOAD_DIR, `${downloadId}.%(ext)s`);
 
       try {
-        await ctx.editMessageCaption("⏳ Mempersiapkan download... (Ketik /cancel buat batalin)", {
+        await ctx.editMessageText("⏳ Mempersiapkan download... (Ketik /cancel buat batalin)", {
           parse_mode: "HTML",
           reply_markup: { inline_keyboard: [] },
         });
@@ -74,8 +75,8 @@ async function processDownload(ctx, id, data, type, quality, audioFormat) {
 
         if (sizeMB > MAX_FILE_SIZE_MB) {
           if (type === "video" && AUTO_COMPRESS) {
-            await ctx.editMessageCaption(
-              `📦 File ${sizeMB.toFixed(1)}MB kegedean, lagi coba kompres otomatis...`,
+            await ctx.editMessageText(
+              `▣ File ${sizeMB.toFixed(1)}MB kegedean, lagi coba kompres otomatis...`,
               { parse_mode: "HTML" }
             );
             const compressedPath = filePath.replace(/\.[^.]+$/, "") + "_compressed.mp4";
@@ -88,8 +89,8 @@ async function processDownload(ctx, id, data, type, quality, audioFormat) {
             } catch (compressErr) {
               cleanup(filePath);
               cleanup(compressedPath);
-              await ctx.editMessageCaption(
-                `❌ File terlalu besar dan gagal dikompres ke bawah ${MAX_FILE_SIZE_MB}MB.\nCoba pilih kualitas lebih rendah.`,
+              await ctx.editMessageText(
+                `✗ File terlalu besar dan gagal dikompres ke bawah ${MAX_FILE_SIZE_MB}MB.\nCoba pilih kualitas lebih rendah.`,
                 { parse_mode: "HTML", reply_markup: retryKeyboard(id, retryType, retryParam).reply_markup }
               );
               return;
@@ -98,8 +99,8 @@ async function processDownload(ctx, id, data, type, quality, audioFormat) {
 
           if (sizeMB > MAX_FILE_SIZE_MB) {
             cleanup(filePath);
-            await ctx.editMessageCaption(
-              `❌ File terlalu besar (${sizeMB.toFixed(1)}MB). Batas Telegram Bot API ${MAX_FILE_SIZE_MB}MB.\n` +
+            await ctx.editMessageText(
+              `✗ File terlalu besar (${sizeMB.toFixed(1)}MB). Batas Telegram Bot API ${MAX_FILE_SIZE_MB}MB.\n` +
                 (type !== "audio" ? "Coba pilih kualitas lebih rendah atau opsi Audio." : ""),
               { parse_mode: "HTML", reply_markup: retryKeyboard(id, retryType, retryParam).reply_markup }
             );
@@ -107,14 +108,20 @@ async function processDownload(ctx, id, data, type, quality, audioFormat) {
           }
         }
 
-        await ctx.editMessageCaption(`✅ Selesai! Mengirim file (${sizeMB.toFixed(1)}MB)...`, { parse_mode: "HTML" });
+        await ctx.editMessageText(`✓ Selesai! Mengirim file (${sizeMB.toFixed(1)}MB)...`, { parse_mode: "HTML" });
+
+        const prefs = getPrefs(userId);
+        const caption = prefs.detailCaption === false ? escapeHtml(info.title) : buildDownloadCaption(info, url);
 
         let sentMsg;
         if (type === "audio") {
-          sentMsg = await ctx.replyWithAudio({ source: filePath }, { title: info.title });
+          sentMsg = await ctx.replyWithAudio({ source: filePath }, { title: info.title, caption, parse_mode: "HTML" });
         } else {
-          sentMsg = await ctx.replyWithVideo({ source: filePath }, { caption: escapeHtml(info.title) });
+          sentMsg = await ctx.replyWithVideo({ source: filePath }, { caption, parse_mode: "HTML" });
         }
+        try {
+          await ctx.deleteMessage();
+        } catch (_) {}
 
         addEntry({
           userId,
@@ -124,7 +131,6 @@ async function processDownload(ctx, id, data, type, quality, audioFormat) {
           quality: type === "video" ? quality : audioFormat || "mp3",
         });
 
-        const prefs = getPrefs(userId);
         if (prefs.autoDeleteMin) scheduleAutoDelete(ctx, sentMsg, prefs.autoDeleteMin);
 
         cleanup(filePath);
@@ -132,7 +138,7 @@ async function processDownload(ctx, id, data, type, quality, audioFormat) {
         if (err.message === "__CANCELLED__") {
           cleanup(findDownloadedFile(downloadId));
           try {
-            await ctx.editMessageCaption("🚫 Download dibatalkan.", { parse_mode: "HTML" });
+            await ctx.editMessageText("⊘ Download dibatalkan.", { parse_mode: "HTML" });
           } catch (_) {}
           return;
         }
@@ -142,20 +148,20 @@ async function processDownload(ctx, id, data, type, quality, audioFormat) {
           notifyOwner(`Gagal download (user ${userId}, url ${url}):\n${err.message}`);
         }
         try {
-          await ctx.editMessageCaption(
-            `❌ Gagal download: ${escapeHtml(err.message)}\n\n` +
+          await ctx.editMessageText(
+            `✗ Gagal download: ${escapeHtml(err.message)}\n\n` +
               "Kemungkinan: situs ini belum didukung yt-dlp, videonya private, atau butuh login.",
             { parse_mode: "HTML", reply_markup: retryKeyboard(id, retryType, retryParam).reply_markup }
           );
         } catch (_) {
-          await ctx.reply(`❌ Gagal download: ${err.message}`);
+          await ctx.reply(`✗ Gagal download: ${err.message}`);
         }
       }
     },
     async (position, total) => {
       try {
-        await ctx.editMessageCaption(
-          `📋 Kamu di antrian nomor ${position} dari ${total}...\n\nKetik /cancel buat batalin.`,
+        await ctx.editMessageText(
+          `▤ Kamu di antrian nomor ${position} dari ${total}...\n\nKetik /cancel buat batalin.`,
           { parse_mode: "HTML" }
         );
       } catch (_) {}
@@ -181,7 +187,7 @@ async function processPlaylistDownload(ctx, id, data) {
         const itemInfo = meta && meta.totalItems ? `Video ${meta.currentItem}/${meta.totalItems} • ` : "";
         const speed = meta && meta.speed ? ` • ${meta.speed}` : "";
         try {
-          await ctx.editMessageCaption(
+          await ctx.editMessageText(
             `⏳ Downloading playlist...\n${itemInfo}<code>${bar}</code> ${percent.toFixed(0)}%${speed}\n\nKetik /cancel buat batalin.`,
             { parse_mode: "HTML" }
           );
@@ -198,7 +204,7 @@ async function processPlaylistDownload(ctx, id, data) {
       const outputTemplate = path.join(plDir, "%(playlist_index)s_%(title).50s.%(ext)s");
 
       try {
-        await ctx.editMessageCaption(
+        await ctx.editMessageText(
           `⏳ Mempersiapkan download playlist (maks ${limit} video, kualitas ${quality}p)... (Ketik /cancel buat batalin)`,
           { parse_mode: "HTML", reply_markup: { inline_keyboard: [] } }
         );
@@ -208,7 +214,7 @@ async function processPlaylistDownload(ctx, id, data) {
         const files = fs.readdirSync(plDir).filter((f) => !f.startsWith("."));
         if (files.length === 0) throw new Error("Gak ada video yang berhasil diunduh dari playlist ini.");
 
-        await ctx.editMessageCaption(`✅ Selesai! Mengirim ${files.length} video...`, { parse_mode: "HTML" });
+        await ctx.editMessageText(`✓ Selesai! Mengirim ${files.length} video...`, { parse_mode: "HTML" });
 
         let sentCount = 0;
         for (const f of files.sort()) {
@@ -225,6 +231,10 @@ async function processPlaylistDownload(ctx, id, data) {
           if (prefsNow.autoDeleteMin) scheduleAutoDelete(ctx, sentMsg, prefsNow.autoDeleteMin);
         }
 
+        try {
+          await ctx.deleteMessage();
+        } catch (_) {}
+
         addEntry({
           userId,
           title: `Playlist (${sentCount}/${files.length} video terkirim)`,
@@ -235,7 +245,7 @@ async function processPlaylistDownload(ctx, id, data) {
       } catch (err) {
         if (err.message === "__CANCELLED__") {
           try {
-            await ctx.editMessageCaption("🚫 Download playlist dibatalkan.", { parse_mode: "HTML" });
+            await ctx.editMessageText("⊘ Download playlist dibatalkan.", { parse_mode: "HTML" });
           } catch (_) {}
         } else {
           logger.error(err);
@@ -243,12 +253,12 @@ async function processPlaylistDownload(ctx, id, data) {
             notifyOwner(`Gagal download playlist (user ${userId}, url ${url}):\n${err.message}`);
           }
           try {
-            await ctx.editMessageCaption(`❌ Gagal download playlist: ${escapeHtml(err.message)}`, {
+            await ctx.editMessageText(`✗ Gagal download playlist: ${escapeHtml(err.message)}`, {
               parse_mode: "HTML",
               reply_markup: retryKeyboard(id, "playlist", "-").reply_markup,
             });
           } catch (_) {
-            await ctx.reply(`❌ Gagal download playlist: ${err.message}`);
+            await ctx.reply(`✗ Gagal download playlist: ${err.message}`);
           }
         }
       } finally {
@@ -259,8 +269,8 @@ async function processPlaylistDownload(ctx, id, data) {
     },
     async (position, total) => {
       try {
-        await ctx.editMessageCaption(
-          `📋 Kamu di antrian nomor ${position} dari ${total} (playlist)...\n\nKetik /cancel buat batalin.`,
+        await ctx.editMessageText(
+          `▤ Kamu di antrian nomor ${position} dari ${total} (playlist)...\n\nKetik /cancel buat batalin.`,
           { parse_mode: "HTML" }
         );
       } catch (_) {}
@@ -274,7 +284,7 @@ async function handlePhotoFallback(ctx, url, statusMsg, id, GALLERY_DL_COOKIES_F
       ctx.chat.id,
       statusMsg.message_id,
       undefined,
-      "🔎 Videonya gak ketemu, kemungkinan ini postingan foto — lagi coba ambil fotonya..."
+      "⌕ Videonya gak ketemu, kemungkinan ini postingan foto — lagi coba ambil fotonya..."
     );
   } catch (_) {}
 
@@ -298,7 +308,7 @@ async function handlePhotoFallback(ctx, url, statusMsg, id, GALLERY_DL_COOKIES_F
       ctx.chat.id,
       statusMsg.message_id,
       undefined,
-      `✅ Ketemu ${files.length} foto! Mengirim...`
+      `✓ Ketemu ${files.length} foto! Mengirim...`
     );
 
     const prefs = getPrefs(ctx.from.id);
@@ -328,7 +338,7 @@ async function handlePhotoFallback(ctx, url, statusMsg, id, GALLERY_DL_COOKIES_F
         ctx.chat.id,
         statusMsg.message_id,
         undefined,
-        `❌ Gagal ambil foto: ${escapeHtml(err.message)}\n\n` +
+        `✗ Gagal ambil foto: ${escapeHtml(err.message)}\n\n` +
           "Kemungkinan: postingannya private/butuh login, atau linknya emang gak ada media yang bisa diambil.",
         id ? { parse_mode: "HTML", reply_markup: retryKeyboard(id, "photo", "-").reply_markup } : { parse_mode: "HTML" }
       );

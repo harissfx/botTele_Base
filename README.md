@@ -72,7 +72,7 @@ npm start
 ## 📁 Struktur Proyek
 
 ```
-bot.js                 # Entry point: setup bot, wiring semua handler, lifecycle
+index.js                 # Entry point: setup bot, wiring semua handler, lifecycle
 config.js               # Baca & expose semua konstanta dari .env
 
 core/

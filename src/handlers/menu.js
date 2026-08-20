@@ -1,5 +1,5 @@
-const menu = require("../lib/menu");
-const logger = require("../lib/logger");
+const menu = require("../../lib/menu");
+const logger = require("../../lib/logger");
 const { sendRootMenu } = require("../commands/basic");
 const { MAX_FILE_SIZE_MB } = require("../config");
 

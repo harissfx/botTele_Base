@@ -4,9 +4,9 @@ const path = require("path");
 const logger = require("./lib/logger");
 const { ownerOnly } = require("./lib/guard");
 const { scheduleInstagramCookieCheck } = require("./lib/cookiecheck");
-const config = require("./config");
-const state = require("./core/state");
-const { createNotifyOwner } = require("./core/notify");
+const config = require("./src/config");
+const state = require("./src/core/state");
+const { createNotifyOwner } = require("./src/core/notify");
 
 if (!config.BOT_TOKEN) {
   logger.error("BOT_TOKEN belum diisi. Copy .env.example jadi .env lalu isi token bot kamu.");
@@ -32,7 +32,7 @@ if (config.GALLERY_DL_COOKIES_FILE && !fs.existsSync(config.GALLERY_DL_COOKIES_F
 const bot = new Telegraf(config.BOT_TOKEN);
 const notifyOwner = createNotifyOwner(bot);
 
-require("./download").initNotify(bot);
+require("./src/download").initNotify(bot);
 
 bot.use((ctx, next) => {
   const who = ctx.from ? `${ctx.from.first_name || ""} (${ctx.from.id})` : "unknown";
@@ -54,14 +54,14 @@ bot.use((ctx, next) => {
 });
 
 bot.use(ownerOnly(config.OWNER_ID));
-require("./commands/basic").register(bot);
-require("./commands/status").register(bot);
-require("./commands/settings").register(bot);
-require("./commands/cancel").register(bot);
-require("./convert/sticker").register(bot);
-require("./convert/file").register(bot);
-require("./handlers/menu").register(bot);
-require("./handlers/text").register(bot);
+require("./src/commands/basic").register(bot);
+require("./src/commands/status").register(bot);
+require("./src/commands/settings").register(bot);
+require("./src/commands/cancel").register(bot);
+require("./src/convert/sticker").register(bot);
+require("./src/convert/file").register(bot);
+require("./src/handlers/menu").register(bot);
+require("./src/handlers/text").register(bot);
 
 function cleanOldDownloads() {
   try {
@@ -79,7 +79,7 @@ cleanOldDownloads();
 bot.catch((err, ctx) => {
   logger.error(`Error saat proses update ${ctx.updateType} dari ${ctx.from?.id}:`, err);
   notifyOwner(`Error tak tertangani saat proses update ${ctx.updateType} dari user ${ctx.from?.id}:\n${err.message}`);
-  ctx.reply("⚠️ Terjadi error, coba lagi ya.").catch(() => {});
+  ctx.reply("⚠ Terjadi error, coba lagi ya.").catch(() => {});
 });
 
 process.on("unhandledRejection", (err) => {
@@ -87,17 +87,29 @@ process.on("unhandledRejection", (err) => {
   notifyOwner(`Unhandled rejection: ${err && err.message ? err.message : err}`);
 });
 
-bot.launch().then(() => {
-  logger.ok("Bot jalan! Kirim link video ke bot Telegram kamu, atau ketik /menu.");
-  bot.telegram
-    .getMe()
-    .then((me) => logger.info(`Bot aktif sebagai @${me.username}`))
-    .catch(() => {});
-
-  if (config.GALLERY_DL_COOKIES_FILE) {
-    scheduleInstagramCookieCheck(config.GALLERY_DL_COOKIES_FILE, notifyOwner);
-  }
+bot.launch().catch((err) => {
+  logger.error("Bot gagal jalan:", err.message);
+  process.exit(1);
 });
 
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
+logger.ok("Bot jalan! Kirim link video ke bot Telegram kamu, atau ketik /menu.");
+bot.telegram
+  .getMe()
+  .then((me) => {
+    logger.info(`Bot aktif sebagai @${me.username}`);
+    logger.startWaitingSpinner();
+  })
+  .catch(() => {});
+
+if (config.GALLERY_DL_COOKIES_FILE) {
+  scheduleInstagramCookieCheck(config.GALLERY_DL_COOKIES_FILE, notifyOwner);
+}
+
+function shutdown(signal) {
+  logger.stopWaitingSpinner();
+  logger.info(`Menerima ${signal}, mematikan bot...`);
+  bot.stop(signal);
+  process.exit(0);
+}
+process.once("SIGINT", () => shutdown("SIGINT"));
+process.once("SIGTERM", () => shutdown("SIGTERM"));

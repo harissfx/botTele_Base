@@ -2,14 +2,15 @@
   "name": "telegram-downloader-bot",
   "version": "1.0.0",
   "description": "Bot Telegram downloader (YouTube, TikTok, Instagram, Facebook, Twitter/X) pakai yt-dlp - jalan lokal, tanpa API pihak ketiga",
-  "main": "bot.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node bot.js"
+    "start": "node index.js"
   },
   "dependencies": {
     "chalk": "^4.1.2",
     "dotenv": "^16.4.5",
     "figlet": "^1.11.4",
+    "spinnies": "^0.5.1",
     "telegraf": "^4.16.3"
   },
   "engines": {

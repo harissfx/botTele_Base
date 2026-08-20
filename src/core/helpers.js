@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { Markup } = require("telegraf");
-const logger = require("../lib/logger");
+const logger = require("../../lib/logger");
 const { BANNER_URL } = require("../config");
 const state = require("./state");
 
@@ -30,7 +30,7 @@ function cleanup(filePath) {
 }
 
 function retryKeyboard(id, type, param) {
-  return Markup.inlineKeyboard([[Markup.button.callback("🔄 Coba lagi", `retry:${id}:${type}:${param}`)]]);
+  return Markup.inlineKeyboard([[Markup.button.callback("↻ Coba lagi", `retry:${id}:${type}:${param}`)]]);
 }
 
 function scheduleAutoDelete(ctx, sentMsg, minutes) {
@@ -43,7 +43,7 @@ function scheduleAutoDelete(ctx, sentMsg, minutes) {
 }
 
 function getBannerSource() {
-  const localBanner = path.join(__dirname, "..", "assets", "banner.jpg");
+  const localBanner = path.join(__dirname, "../.", "assets", "banner.jpg");
   if (fs.existsSync(localBanner)) return { source: localBanner };
   return BANNER_URL;
 }

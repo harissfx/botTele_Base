@@ -1,4 +1,4 @@
-const menu = require("../lib/menu");
+const menu = require("../../lib/menu");
 const { safeReplyWithPhoto, getBannerSource } = require("../core/helpers");
 const { MAX_FILE_SIZE_MB } = require("../config");
 
@@ -24,10 +24,10 @@ function register(bot) {
 
   bot.command("ping", async (ctx) => {
     const start = Date.now();
-    const msg = await ctx.reply("🏓 Pong...");
+    const msg = await ctx.reply("○ Pong...");
     const latency = Date.now() - start;
     try {
-      await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, undefined, `🏓 Pong! ${latency}ms`);
+      await ctx.telegram.editMessageText(ctx.chat.id, msg.message_id, undefined, `○ Pong! ${latency}ms`);
     } catch (_) {}
   });
 }

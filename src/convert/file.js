@@ -2,10 +2,10 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { Markup } = require("telegraf");
-const { convertToAudio, convertToGif } = require("../lib/ffmpeg");
-const { addEntry } = require("../lib/history");
-const { getPrefs } = require("../lib/prefs");
-const logger = require("../lib/logger");
+const { convertToAudio, convertToGif } = require("../../lib/ffmpeg");
+const { addEntry } = require("../../lib/history");
+const { getPrefs } = require("../../lib/prefs");
+const logger = require("../../lib/logger");
 const state = require("../core/state");
 const { cleanup, scheduleAutoDelete } = require("../core/helpers");
 const { isCriticalError, createNotifyOwner } = require("../core/notify");
@@ -19,7 +19,7 @@ async function runFileConversion(ctx, data, kind, format, notifyOwner) {
   const outputPath = inputPath.replace(/_in\.mp4$/, `_out.${outExt}`);
 
   try {
-    await ctx.editMessageText(`🔄 Mengubah jadi ${kind === "gif" ? "GIF" : outExt.toUpperCase()}...`);
+    await ctx.editMessageText(`↻ Mengubah jadi ${kind === "gif" ? "GIF" : outExt.toUpperCase()}...`);
   } catch (_) {}
 
   try {
@@ -48,7 +48,7 @@ async function runFileConversion(ctx, data, kind, format, notifyOwner) {
       notifyOwner(`Gagal convert file (user ${userId}):\n${err.message}`);
     }
     try {
-      await ctx.reply(`❌ Gagal convert: ${err.message}`);
+      await ctx.reply(`✗ Gagal convert: ${err.message}`);
     } catch (_) {}
   } finally {
     cleanup(inputPath);
@@ -71,10 +71,10 @@ function register(bot) {
 
     const fileSizeMB = (media.file_size || 0) / (1024 * 1024);
     if (fileSizeMB > 20) {
-      return ctx.reply("❌ File terlalu besar buat aku ambil (>20MB). Ini batas Telegram Bot API untuk bot biasa.");
+      return ctx.reply("✗ File terlalu besar buat aku ambil (>20MB). Ini batas Telegram Bot API untuk bot biasa.");
     }
 
-    const statusMsg = await ctx.reply("⬇️ Mengunduh file dari Telegram...");
+    const statusMsg = await ctx.reply("↓ Mengunduh file dari Telegram...");
     const jobId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const inputPath = path.join(state.DOWNLOAD_DIR, `${jobId}_in.mp4`);
 
@@ -99,11 +99,11 @@ function register(bot) {
         ctx.chat.id,
         statusMsg.message_id,
         undefined,
-        "✅ File diterima! Mau dijadikan apa?",
+        "✓ File diterima! Mau dijadikan apa?",
         {
           reply_markup: Markup.inlineKeyboard([
-            [Markup.button.callback("🎵 MP3", `cvaudio:${cid}:mp3`), Markup.button.callback("🎼 M4A/Opus", `cvaudiofmt:${cid}`)],
-            [Markup.button.callback("🎞 GIF", `cvgif:${cid}`)],
+            [Markup.button.callback("♪ MP3", `cvaudio:${cid}:mp3`), Markup.button.callback("♪ M4A/Opus", `cvaudiofmt:${cid}`)],
+            [Markup.button.callback("▶ GIF", `cvgif:${cid}`)],
           ]).reply_markup,
         }
       );
@@ -114,7 +114,7 @@ function register(bot) {
       }
       cleanup(inputPath);
       try {
-        await ctx.telegram.editMessageText(ctx.chat.id, statusMsg.message_id, undefined, `❌ Gagal ambil file: ${err.message}`);
+        await ctx.telegram.editMessageText(ctx.chat.id, statusMsg.message_id, undefined, `✗ Gagal ambil file: ${err.message}`);
       } catch (_) {}
     }
   });
@@ -125,7 +125,7 @@ function register(bot) {
     await ctx.answerCbQuery();
     if (!data) return ctx.reply("⌛ File sudah gak ada lagi, kirim ulang videonya ya.");
     try {
-      await ctx.editMessageText("🎼 Pilih format audio:", {
+      await ctx.editMessageText("♪ Pilih format audio:", {
         reply_markup: Markup.inlineKeyboard([
           [Markup.button.callback("M4A", `cvaudio:${cid}:m4a`), Markup.button.callback("Opus", `cvaudio:${cid}:opus`)],
         ]).reply_markup,

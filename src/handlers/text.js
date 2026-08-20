@@ -1,9 +1,9 @@
-const { fetchInfo, isPlaylistUrl, fetchPlaylistInfo } = require("../lib/ytdlp");
-const { isPhotoFallbackSite } = require("../lib/gallery");
-const { getPrefs } = require("../lib/prefs");
-const { escapeHtml } = require("../lib/format");
+const { fetchInfo, isPlaylistUrl, fetchPlaylistInfo } = require("../../lib/ytdlp");
+const { isPhotoFallbackSite } = require("../../lib/gallery");
+const { getPrefs } = require("../../lib/prefs");
+const { escapeHtml } = require("../../lib/format");
 const state = require("../core/state");
-const { storePending, safeReplyWithPhoto, getBannerSource } = require("../core/helpers");
+const { storePending } = require("../core/helpers");
 const { infoKeyboard, qualityKeyboard, audioFormatKeyboard, buildInfoCaption } = require("../core/keyboards");
 const { isCriticalError, createNotifyOwner } = require("../core/notify");
 const { processDownload, processPlaylistDownload, handlePhotoFallback } = require("../download");
@@ -21,7 +21,7 @@ function register(bot) {
     }
 
     const url = urlMatch[0];
-    const statusMsg = await ctx.reply("🔎 Mengambil info video...");
+    const statusMsg = await ctx.reply("⌕ Mengambil info video...");
 
     let info;
     try {
@@ -38,7 +38,7 @@ function register(bot) {
         ctx.chat.id,
         statusMsg.message_id,
         undefined,
-        `❌ <b>Gagal ambil info video</b>\n<i>${escapeHtml(err.message)}</i>`,
+        `✗ <b>Gagal ambil info video</b>\n<i>${escapeHtml(err.message)}</i>`,
         { parse_mode: "HTML" }
       );
       return;
@@ -61,9 +61,7 @@ function register(bot) {
       await ctx.deleteMessage(statusMsg.message_id);
     } catch (_) {}
 
-    const thumb = info.thumbnail || getBannerSource();
-    await safeReplyWithPhoto(ctx, thumb, {
-      caption,
+    await ctx.reply(caption, {
       parse_mode: "HTML",
       reply_markup: infoKeyboard(id, { userId: ctx.from.id, playlistCount }).reply_markup,
     });
@@ -76,7 +74,7 @@ function register(bot) {
     if (!data) return ctx.reply("⌛ Permintaan sudah kedaluwarsa, kirim ulang linknya ya.");
 
     if (type === "photo") {
-      const statusMsg = await ctx.reply("🔄 Mencoba ambil foto lagi...");
+      const statusMsg = await ctx.reply("↻ Mencoba ambil foto lagi...");
       return handlePhotoFallback(ctx, data.url, statusMsg, id, GALLERY_DL_COOKIES_FILE);
     }
     if (type === "playlist") {
@@ -93,7 +91,7 @@ function register(bot) {
     const data = state.pending.get(id);
     await ctx.answerCbQuery();
     if (!data) return ctx.reply("⌛ Permintaan sudah kedaluwarsa, kirim ulang linknya ya.");
-    await ctx.editMessageCaption(buildInfoCaption(data.info) + "\n⚙️ Pilih kualitas video:", {
+    await ctx.editMessageText(buildInfoCaption(data.info) + "\n≡ Pilih kualitas video:", {
       parse_mode: "HTML",
       reply_markup: qualityKeyboard(id).reply_markup,
     });
@@ -104,7 +102,7 @@ function register(bot) {
     const data = state.pending.get(id);
     await ctx.answerCbQuery();
     if (!data) return ctx.reply("⌛ Permintaan sudah kedaluwarsa, kirim ulang linknya ya.");
-    await ctx.editMessageCaption(buildInfoCaption(data.info) + "\n🎼 Pilih format audio:", {
+    await ctx.editMessageText(buildInfoCaption(data.info) + "\n♪ Pilih format audio:", {
       parse_mode: "HTML",
       reply_markup: audioFormatKeyboard(id).reply_markup,
     });
@@ -115,7 +113,7 @@ function register(bot) {
     const data = state.pending.get(id);
     await ctx.answerCbQuery();
     if (!data) return ctx.reply("⌛ Permintaan sudah kedaluwarsa, kirim ulang linknya ya.");
-    await ctx.editMessageCaption(buildInfoCaption(data.info), {
+    await ctx.editMessageText(buildInfoCaption(data.info), {
       parse_mode: "HTML",
       reply_markup: infoKeyboard(id, data).reply_markup,
     });

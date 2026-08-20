@@ -1,8 +1,8 @@
 const fs = require("fs");
 const path = require("path");
-const { imageToWebpSticker, videoToWebpSticker } = require("../lib/sticker");
-const { addEntry } = require("../lib/history");
-const logger = require("../lib/logger");
+const { imageToWebpSticker, videoToWebpSticker } = require("../../lib/sticker");
+const { addEntry } = require("../../lib/history");
+const logger = require("../../lib/logger");
 const state = require("../core/state");
 const { cleanup } = require("../core/helpers");
 const { isCriticalError, createNotifyOwner } = require("../core/notify");
@@ -28,10 +28,10 @@ function consumeStickerMode(userId) {
 async function handleStickerConversion(ctx, fileId, kind, fileSizeBytes, notifyOwner) {
   const fileSizeMB = (fileSizeBytes || 0) / (1024 * 1024);
   if (fileSizeMB > 20) {
-    return ctx.reply("❌ File terlalu besar buat aku ambil (>20MB). Ini batas Telegram Bot API untuk bot biasa.");
+    return ctx.reply("✗ File terlalu besar buat aku ambil (>20MB). Ini batas Telegram Bot API untuk bot biasa.");
   }
 
-  const statusMsg = await ctx.reply("🔄 Mengubah jadi stiker...");
+  const statusMsg = await ctx.reply("↻ Mengubah jadi stiker...");
   const jobId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const inputPath = path.join(state.DOWNLOAD_DIR, `${jobId}_in${kind === "image" ? ".jpg" : ".mp4"}`);
   const outputPath = path.join(state.DOWNLOAD_DIR, `${jobId}_out.webp`);
@@ -49,7 +49,7 @@ async function handleStickerConversion(ctx, fileId, kind, fileSizeBytes, notifyO
       await videoToWebpSticker(inputPath, outputPath);
     }
 
-    await ctx.telegram.editMessageText(ctx.chat.id, statusMsg.message_id, undefined, "✅ Selesai! Mengirim stiker...");
+    await ctx.telegram.editMessageText(ctx.chat.id, statusMsg.message_id, undefined, "✓ Selesai! Mengirim stiker...");
     await ctx.replyWithSticker({ source: outputPath });
 
     addEntry({ userId: ctx.from.id, title: "media → stiker", url: null, type: "sticker", quality: null });
@@ -63,7 +63,7 @@ async function handleStickerConversion(ctx, fileId, kind, fileSizeBytes, notifyO
         ctx.chat.id,
         statusMsg.message_id,
         undefined,
-        `❌ Gagal ubah jadi stiker: ${err.message}`
+        `✗ Gagal ubah jadi stiker: ${err.message}`
       );
     } catch (_) {}
   } finally {
@@ -77,7 +77,7 @@ function register(bot) {
   bot.command("sticker", (ctx) => {
     setStickerMode(ctx.from.id);
     return ctx.reply(
-      "🖼 Mode stiker aktif! Kirim gambar atau video pendek (maks ±8 detik akan dipotong otomatis) sekarang, nanti aku ubah jadi stiker Telegram.\n" +
+      "▭ Mode stiker aktif! Kirim gambar atau video pendek (maks ±8 detik akan dipotong otomatis) sekarang, nanti aku ubah jadi stiker Telegram.\n" +
         "Mode ini aktif 5 menit atau sampai kamu kirim 1 media."
     );
   });

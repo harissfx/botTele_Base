@@ -62,7 +62,7 @@ function register(bot) {
     const media = ctx.message.video || ctx.message.document;
     if (!media) return;
     const mime = media.mime_type || "";
-    if (ctx.message.document && !mime.startsWith("video/")) return; // dokumen non-video diabaikan
+    if (ctx.message.document && !mime.startsWith("video/")) return;
 
     const { handleStickerConversion } = require("./sticker");
     if (consumeStickerMode(ctx.from.id)) {

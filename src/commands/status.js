@@ -1,7 +1,7 @@
 const os = require("os");
 const { escapeHtml, formatSize } = require("../../lib/format");
 const { listFormats } = require("../../lib/ytdlp");
-const { formatUptime, cpuUsagePercent, diskUsage, getYtdlpVersion } = require("../../lib/sysinfo");
+const { formatUptime, cpuUsagePercent, diskUsage, getYtdlpVersion, formatStartTime } = require("../../lib/sysinfo");
 const { getStats } = require("../../lib/history");
 const { checkInstagramCookies } = require("../../lib/cookiecheck");
 const logger = require("../../lib/logger");
@@ -13,7 +13,19 @@ function isOwner(ctx) {
   return OWNER_ID && String(ctx.from.id) === String(OWNER_ID);
 }
 
+const BOT_START_TIME = new Date();
+
 function register(bot) {
+  bot.command("uptime", async (ctx) => {
+    if (!isOwner(ctx)) return;
+    const uptimeText = formatUptime(process.uptime());
+    const text =
+      "◷ <b>Uptime Bot</b>\n\n" +
+      `Nyala sejak: <b>${formatStartTime(BOT_START_TIME)}</b>\n` +
+      `Sudah berjalan: <b>${uptimeText}</b>`;
+    await ctx.reply(text, { parse_mode: "HTML" });
+  });
+
   const notifyOwner = createNotifyOwner(bot);
   bot.command("cookiecheck", async (ctx) => {
     if (!isOwner(ctx)) return;
